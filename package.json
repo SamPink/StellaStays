@@ -1,7 +1,7 @@
 {
   "name": "StellaStays",
   "version": "1.0.0",
-  "description": "",
+  "description": "node_modules\\.bin\\sequelize-auto -o \"./models\" -d mydb -h localhost -u postgres -p 5432 -x '' -e postgres",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -14,5 +14,13 @@
     "pg": "^8.6.0",
     "sequelize": "^6.6.5",
     "sequelize-auto": "^0.8.3"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SamPink/StellaStays.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SamPink/StellaStays/issues"
+  },
+  "homepage": "https://github.com/SamPink/StellaStays#readme"
 }

@@ -1,63 +1,49 @@
 const express = require("express");
+const sequelize = require("./database/config");
+
+var initModels = require("./models/init-models");
+
+var models = initModels(sequelize);
+
 const app = express();
 const port = 3000;
-const { Sequelize } = require('sequelize');
 
+city = "Dubai";
+start = "2021-06-01";
+end = "2021-06-03";
+type = "week";
+months = "may";
+atype = "1bdr";
 
-const sequelize = new Sequelize('postgres://postgres:sam@localhost:5432/mydb') // Example for postgres
-
-const property = sequelize.define('property',{
-id: {
-  field: 'PropertyId',
-  type: String,
-  primaryKey: true,
-}
-})
-
-
-const { Client } = require("pg");
-
-const client = new Client({
-  user: "postgres",
-  host: "localhost",
-  database: "mydb",
-  password: "sam",
-});
-
-client.connect();
-
-var start = '01-01-2021';
-var end = '01-02-2020';
-var type = 'hey';
-var months = 'sup';
-
-//pass json request
-var json = {
-  city: "Dubai",
+var params = {
+  city: city,
   date: { start, end },
   flexible: { type, months },
-  apartmentType: null,
+  apartmentType: atype,
   amenities: ["WiFi", "Pool"],
 };
 
-//city is a mandatory feild
-
-//either date or flexible is accepted
-
-//Amenities filters the units that support the requested values
-
-//apartmentType is optional
-
-app.get('/', (req, res) => {
-    client.query("SELECT id, city FROM test.building;", (err, response) => {
-    console.log(err, res);
-    res.send(response)
-    client.end();
-  });
-
-  
-})
+app.get("/", (req, res) => {
+  models.building
+    .findOne({
+      where: {
+        city: city,
+      },
+    })
+    .then((building) => {
+      id = building.id;
+      models.property
+        .findOne({
+          where: {
+            building_id: id,
+          },
+        })
+        .then((p) => {
+          res.json(p)
+        });
+    });
+});
 
 app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`)
-})
+  console.log(`Example app listening at http://localhost:${port}`);
+});
