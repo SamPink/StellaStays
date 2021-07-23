@@ -4,8 +4,6 @@ const { Op, where } = require("sequelize");
 
 var initModels = require("./models/init-models");
 const { Sequelize } = require("./database/config");
-const moment = require("moment");
-const { months } = require("moment");
 
 var models = initModels(sequelize);
 
@@ -14,11 +12,12 @@ const port = 3001;
 
 city = "Dubai";
 start = "2020-06-01";
-end = "2021-06-03";
+end = "2020-06-03";
 type = "week";
 mon = "jan";
 atype = "1bdr";
 amenities = ["WiFi", "Parking"];
+
 
 
 app.get("/", async (req, res) => {
@@ -57,13 +56,12 @@ app.get("/", async (req, res) => {
   //js contains all properties matching search conditions
 
   if (months & type) {
-    const flex = new moment(`01-${month}-2021`, "DD-MMM-YYYY"); //assume the year
-    var start_flex = flex.format("YYYY-MM-DD");
+    const flex = new Date(`01-${mon}-2021`); //assume the year
 
     if(type == "week"){
-      var end_flex = flex.add(7, 'days')
+      var end_flex = new Date(flex.setMonth(date.getDate()+7));
     }else if(type == "month"){
-      var end_flex = flex.add(1, 'M')
+      var end_flex = new Date(flex.setMonth(date.getMonth()+1));
     }
     
   }
