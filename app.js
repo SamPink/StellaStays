@@ -72,7 +72,7 @@ app.get("/", async (req, res) => {
 
     var flex_end = moment(`2021-${m}-01`, "YYYY-MMM-DD").add(1, "months");
 
-    req.push({ check_in: { [Op.between]: [flex, flex_end] } });
+    req.push({ check_in: { [Op.notBetween]: [flex, flex_end] } });
   });
 
   query_a = {
@@ -91,8 +91,8 @@ app.get("/", async (req, res) => {
     start = moment(obj.check_in, "YYYY-MM-DD");
     end = moment(obj.check_out, "YYYY-MM-DD");
 
-    //console.log("start " + start.format('YYYY-MM-DD'));
-    //console.log("End " + end.format('YYYY-MM-DD'));
+    console.log("start " + start.format('YYYY-MM-DD'));
+    console.log("End " + end.format('YYYY-MM-DD'));
 
     var weekdays = start.businessDiff(end);
 
@@ -100,9 +100,11 @@ app.get("/", async (req, res) => {
 
     var weekendDays =  days - weekdays;
 
-    //console.log("days " + days);
-    //console.log("working days " + weekdays);
-    //console.log("weekend days " + weekendDays);
+    console.log("days " + days);
+    console.log("working days " + weekdays);
+    console.log("weekend days " + weekendDays);
+    console.log(obj.property_id);
+    
 
     if (type == "week" && days >= 7) {
       avalibleProps.push(obj.property_id);
@@ -111,6 +113,7 @@ app.get("/", async (req, res) => {
     } else if (type == "month" && days >= 30) {
       avalibleProps.push(obj.property_id);
     }
+
   });
 
   //if a proprty is in av and js its a match
