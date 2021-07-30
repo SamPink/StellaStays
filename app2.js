@@ -72,8 +72,10 @@ app.get("/", async (req, res) => {
 
   if (qu.date) {
     //assume date is valid and in format
-    start = moment(qu.date[0], "YYYY-MM-DD");
-    end = moment(qu.date[1], "YYYY-MM-DD");
+    var dates = qu.date.split(",");
+    var start = moment(dates[0], "YYYY-MM-DD");
+    var end = moment(dates[1], "YYYY-MM-DD");
+    var range = momentRange().range(start, end);
   }
 
   if (qu.ftype && qu.fmonths) {
@@ -137,7 +139,32 @@ app.get("/", async (req, res) => {
   }
 
   if (qu.date) {
-    
+    js.properties.forEach((p) => {
+      var avalible = 0;
+      p.availabilities.forEach((r) => {
+        start_r = moment(r.start_date, "YYYY-MM-DD");
+        end_r = moment(r.end_date, "YYYY-MM-DD");
+        var range_r = momentRange().range(start_r, end_r);
+
+        if (range_r.overlaps(range)) {
+          avalible = 1;
+        }
+      });
+
+      p.reservations.forEach((r) => {
+        start_r = moment(r.check_in, "YYYY-MM-DD");
+        end_r = moment(r.check_out, "YYYY-MM-DD");
+
+        var range_r = momentRange().range(start_r, end_r);
+
+        if (range_r.overlaps(range)) {
+          avalible = 1;
+        }
+      });
+      if (avalible == 0) {
+        response["match"].push(p.id);
+      }
+    });
   } else {
     var ranges = [];
 
