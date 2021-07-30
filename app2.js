@@ -1,40 +1,20 @@
 const express = require("express");
 const sequelize = require("./database/config");
-const { Op, where } = require("sequelize");
-
 const moment = require("moment-business-days");
 const momentRange = require("moment-range");
-
-//const moment = MomentRange.extendMoment(Moment);
-
 var initModels = require("./models/init-models");
-const { Sequelize } = require("./database/config");
-const reservation = require("./models/reservation");
 
 var models = initModels(sequelize);
 
 const app = express();
-const port = 3100;
+const port = 3200;
 
-//"city" is mandatory to set
-//"apartmentType" is optional
-//"Amenities" filters the units that support the requested values
-
-//flexible.type can be one of "weekend", "week" or "month"
-//flexible.months is an array of 3-letter months, for example: ["may", "jun", ..]
-
-//So submitting flexible {type: "week", months: ["may", "jun"]} tells the service to find a unit that is available for at least a week during May or June.
-//Weekends vary across cities, so if you're checking for a Dubai weekend, that would be Fri & Sat, but if it's Montreal for example, then it's Sat & Sun.
-
-// Note: when checking a unit availability, query both test.reservation & test.availability, if a unit has a reservation on an overlapping date range, or if it's
-// manually blocked (for example: for maintenance) and has an entry with is_blocked set to true with an overlapping start_date & end_date in test.availability
+var response = {};
+response["match"] = [];
+response["alternative"] = [];
+response["other"] = [];
 
 app.get("/", async (req, res) => {
-  var response = {};
-  response["match"] = [];
-  response["alternative"] = [];
-  response["other"] = [];
-
   var whereCondition = {}; //used to store query
 
   const qu = req.query;
@@ -49,7 +29,6 @@ app.get("/", async (req, res) => {
 
   if (qu.apartmentType) {
     //pass appartment type to query if selected
-    console.log(qu.apartmentType.split(","));
     whereCondition["property_type"] = qu.apartmentType.split(",");
   }
 
@@ -84,9 +63,6 @@ app.get("/", async (req, res) => {
     mon = qu.fmonths.split(",");
 
     var flex_range = [];
-
-    console.log(type);
-    console.log(mon);
 
     mon.forEach((m) => {
       var start = moment(`2021-${m}-01`, "YYYY-MMM-DD"); //pass month and assume the year
@@ -127,7 +103,33 @@ app.get("/", async (req, res) => {
   //json containing valid properties with resepctive reservations and availabilitys
   const js = await models.building.findOne(query_b);
 
+  //filter amenities, should be done during request, explained in line 45
+  var amens = qu.amenities.split(",");
+  js.properties.forEach((p) => {
+    var diff = p.amenities.filter((element) => !amens.includes(element));
+    if (diff.length != 0) {
+      js.properties.splice(p);
+    }
+  });
+
   //set working days
+  setWeekends(qu);
+
+  if (qu.date) {
+    fixedDates(js, range);
+  } else {
+    flexDates(js, flex_range);
+  }
+
+  //then return valid entries
+  res.json(js);
+});
+
+app.listen(port, () => {
+  console.log(`Example app listening at http://localhost:${port}`);
+});
+
+function setWeekends(qu) {
   if (qu.city == "Dubai") {
     moment.updateLocale("ae", {
       workingWeekdays: [0, 1, 2, 3, 4, 5],
@@ -137,106 +139,87 @@ app.get("/", async (req, res) => {
       workingWeekdays: [1, 2, 3, 4, 5, 6],
     });
   }
+}
 
-  if (qu.date) {
-    js.properties.forEach((p) => {
-      var avalible = 0;
-      p.availabilities.forEach((r) => {
-        start_r = moment(r.start_date, "YYYY-MM-DD");
-        end_r = moment(r.end_date, "YYYY-MM-DD");
-        var range_r = momentRange().range(start_r, end_r);
+function flexDates(js, flex_range) {
+  var ranges = [];
 
-        if (range_r.overlaps(range)) {
-          avalible = 1;
-        }
-      });
+  js.properties.forEach((p) => {
+    p.reservations.forEach((r) => {
+      //get the rage for the reservation
+      start_r = moment(r.check_in, "YYYY-MM-DD");
+      end_r = moment(r.check_out, "YYYY-MM-DD");
 
-      p.reservations.forEach((r) => {
-        start_r = moment(r.check_in, "YYYY-MM-DD");
-        end_r = moment(r.check_out, "YYYY-MM-DD");
+      var range_res = momentRange().range(start_r, end_r);
 
-        var range_r = momentRange().range(start_r, end_r);
-
-        if (range_r.overlaps(range)) {
-          avalible = 1;
-        }
-      });
-      if (avalible == 0) {
-        response["match"].push(p.id);
-      }
+      ranges.push(range_res);
     });
-  } else {
-    var ranges = [];
 
-    js.properties.forEach((p) => {
-      p.reservations.forEach((r) => {
-        //get the rage for the reservation
-        start_r = moment(r.check_in, "YYYY-MM-DD");
-        end_r = moment(r.check_out, "YYYY-MM-DD");
+    p.availabilities.forEach((a) => {
+      if (a.is_blocked == 1) {
+        start_r = moment(a.start_date, "YYYY-MM-DD");
+        end_r = moment(a.end_date, "YYYY-MM-DD");
 
         var range_res = momentRange().range(start_r, end_r);
 
         ranges.push(range_res);
-      });
+      }
+    });
+    //ranges contains dates where property is not avalible
+    ranges.every((r) => {
+      flex_range.every((range) => {
+        //need to find where property is avalible for >= n days
+        var av_ranges = range.subtract(r);
+        var start = moment(av_ranges[0].start, "YYYY-MM-DD");
+        var end = moment(av_ranges[0].end, "YYYY-MM-DD");
+        var weekdays = start.businessDiff(end);
+        var days = end.diff(start, "days") + 1; //+1 to include first day
+        var weekendDays = days - weekdays;
 
-      p.availabilities.forEach((a) => {
-        if (a.is_blocked == 1) {
-          start_r = moment(a.start_date, "YYYY-MM-DD");
-          end_r = moment(a.end_date, "YYYY-MM-DD");
+        //console.log(av_ranges);
+        //console.log("start " + start.format("YYYY-MM-DD"));
+        //console.log("End " + end.format("YYYY-MM-DD"));
+        //console.log("days " + days);
+        //console.log("working days " + weekdays);
+        //console.log("weekend days " + weekendDays);
 
-          var range_res = momentRange().range(start_r, end_r);
-
-          ranges.push(range_res);
+        if (type == "week" && days >= 7) {
+          response["match"].push(p.id);
+        } else if (type == "weekend" && weekendDays >= 2) {
+          response["match"].push(p.id);
+        } else if (type == "month" && days >= 30) {
+          response["match"].push(p.id);
         }
       });
-      //ranges contains dates where property is not avalible
-      ranges.every((r) => {
-        flex_range.every((range) => {
-          //need to find where property is avalible for >= n days
-          var av_ranges = range.subtract(r);
-
-          console.log(av_ranges);
-
-          start = moment(av_ranges[0].start, "YYYY-MM-DD");
-          end = moment(av_ranges[0].end, "YYYY-MM-DD");
-
-          console.log("start " + start.format("YYYY-MM-DD"));
-          console.log("End " + end.format("YYYY-MM-DD"));
-
-          var weekdays = start.businessDiff(end);
-
-          var days = end.diff(start, "days") + 1; //+1 to include first day
-
-          var weekendDays = days - weekdays;
-
-          console.log("days " + days);
-          console.log("working days " + weekdays);
-          console.log("weekend days " + weekendDays);
-
-          if (type == "week" && days >= 7) {
-            //avalibleProps.push(obj.property_id);
-            console.log(p.id);
-            response["match"].push(p.id);
-          } else if (type == "weekend" && weekendDays >= 2) {
-            //avalibleProps.push(obj.property_id);
-            console.log("weekend");
-            response["match"].push(p.id);
-          } else if (type == "month" && days >= 30) {
-            //avalibleProps.push(obj.property_id);
-            console.log("month");
-            response["match"].push(p.id);
-          } else {
-            console.log("no");
-          }
-        });
-      });
     });
-  }
+  });
+}
 
-  //then return valid entries
-  res.json(response);
-});
+function fixedDates(js, range) {
+  js.properties.forEach((p) => {
+    var avalible = 0;
+    p.availabilities.forEach((r) => {
+      start_r = moment(r.start_date, "YYYY-MM-DD");
+      end_r = moment(r.end_date, "YYYY-MM-DD");
+      var range_r = momentRange().range(start_r, end_r);
 
-app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`);
-});
+      if (range_r.overlaps(range)) {
+        avalible = 1;
+      }
+    });
+
+    p.reservations.forEach((r) => {
+      start_r = moment(r.check_in, "YYYY-MM-DD");
+      end_r = moment(r.check_out, "YYYY-MM-DD");
+
+      var range_r = momentRange().range(start_r, end_r);
+
+      if (range_r.overlaps(range)) {
+        avalible = 1;
+      }
+    });
+    if (avalible == 0) {
+      response["match"].push(p.id);
+    }
+  });
+}
