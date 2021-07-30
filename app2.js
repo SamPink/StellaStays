@@ -32,23 +32,6 @@ app.get("/", async (req, res) => {
     whereCondition["property_type"] = qu.apartmentType.split(",");
   }
 
-  if (qu.amenities) {
-    /*
-      const am = models.property.build({amenities: '{WiFi,Parking}'})
-      console.log(am.amenities);
-      whereCondition["amenities"] = am.amenities;
-      //error, (node:16368) UnhandledPromiseRejectionWarning: TypeError: values.map is not a function
-
-      whereCondition["amenities"] = ["WiFi","Parking"]
-      //error, (node:13500) UnhandledPromiseRejectionWarning: SequelizeDatabaseError: type "enum_test.property_amenities[]" does not exist
-
-      this error must be caused when trying to pass the try type: DataTypes.ARRAY(DataTypes.ENUM("WiFi","Pool","Garden","Tennis table","Parking"))
-      and somehow sequelize is not correctly passing the value
-
-      I will therefore solve this error by filtering the query after the request is made
-    */
-  }
-
   if (qu.date) {
     //assume date is valid and in format
     var dates = qu.date.split(",");
@@ -75,6 +58,66 @@ app.get("/", async (req, res) => {
     });
   }
 
+  //json containing valid properties with resepctive reservations and availabilitys
+  const js = await models.building.findOne(createQuery(qu, whereCondition));
+
+  if (qu.amenities) {
+    /*
+      const am = models.property.build({amenities: '{WiFi,Parking}'})
+      console.log(am.amenities);
+      whereCondition["amenities"] = am.amenities;
+      //error, (node:16368) UnhandledPromiseRejectionWarning: TypeError: values.map is not a function
+
+      whereCondition["amenities"] = ["WiFi","Parking"]
+      //error, (node:13500) UnhandledPromiseRejectionWarning: SequelizeDatabaseError: type "enum_test.property_amenities[]" does not exist
+
+      this error must be caused when trying to pass the try type: DataTypes.ARRAY(DataTypes.ENUM("WiFi","Pool","Garden","Tennis table","Parking"))
+      and somehow sequelize is not correctly passing the value
+
+      I will therefore solve this error by filtering the query after the request is made
+    */
+
+    //filter amenities after request
+    var amens = qu.amenities.split(",");
+    js.properties.forEach((p) => {
+      var diff = p.amenities.filter((element) => !amens.includes(element));
+      //diff is items in property that are not in request
+      if (diff.length != 0) {
+        js.properties.splice(p); //if missing items remove the property
+      }
+    });
+  }
+
+  //set working days
+  setWeekends(qu);
+
+  if (qu.date) {
+    fixedDates(js, range, response['match']);
+  } else {
+    flexDates(js, flex_range, response['match']);
+  }
+
+  if (response["match"].length < 1) {
+    //fill other response by removing filters to database query
+    const js_other = await models.building.findOne(createQuery(qu, {}));
+
+    if (qu.date) {
+      fixedDates(js_other, range, response['other']);
+    } else {
+      flexDates(js_other, flex_range, response['other']);
+    }
+  }
+
+  //then return valid entries
+  console.log(response);
+  res.json(js);
+});
+
+app.listen(port, () => {
+  console.log(`Example app listening at http://localhost:${port}`);
+});
+
+function createQuery(qu, whereCondition) {
   //this query filters properties by city and optional values enterd into the where condition
   //using Eager Loading include valid properties, reservations and availabilitys all in 1 query
   query_b = {
@@ -100,34 +143,8 @@ app.get("/", async (req, res) => {
     ],
   };
 
-  //json containing valid properties with resepctive reservations and availabilitys
-  const js = await models.building.findOne(query_b);
-
-  //filter amenities, should be done during request, explained in line 45
-  var amens = qu.amenities.split(",");
-  js.properties.forEach((p) => {
-    var diff = p.amenities.filter((element) => !amens.includes(element));
-    if (diff.length != 0) {
-      js.properties.splice(p);
-    }
-  });
-
-  //set working days
-  setWeekends(qu);
-
-  if (qu.date) {
-    fixedDates(js, range);
-  } else {
-    flexDates(js, flex_range);
-  }
-
-  //then return valid entries
-  res.json(js);
-});
-
-app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`);
-});
+  return query_b;
+}
 
 function setWeekends(qu) {
   if (qu.city == "Dubai") {
@@ -141,7 +158,7 @@ function setWeekends(qu) {
   }
 }
 
-function flexDates(js, flex_range) {
+function flexDates(js, flex_range, list) {
   var ranges = [];
 
   js.properties.forEach((p) => {
@@ -184,18 +201,19 @@ function flexDates(js, flex_range) {
         //console.log("weekend days " + weekendDays);
 
         if (type == "week" && days >= 7) {
-          response["match"].push(p.id);
+          console.log(1);
+          list.push(p.id);
         } else if (type == "weekend" && weekendDays >= 2) {
-          response["match"].push(p.id);
+          list.push(p.id);
         } else if (type == "month" && days >= 30) {
-          response["match"].push(p.id);
+          list.push(p.id);
         }
       });
     });
   });
 }
 
-function fixedDates(js, range) {
+function fixedDates(js, range, list) {
   js.properties.forEach((p) => {
     var avalible = 0;
     p.availabilities.forEach((r) => {
@@ -219,7 +237,7 @@ function fixedDates(js, range) {
       }
     });
     if (avalible == 0) {
-      response["match"].push(p.id);
+      list.push(p.id);
     }
   });
 }
