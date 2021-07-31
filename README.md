@@ -8,7 +8,7 @@ To calculate dates I have used moment js along with moment-business-days (for ca
 
 Express is used for web framework.
 
-As a primarily python developer some of the JavaScript may look strange and possibly inefficient. However I believe I have solved this problem efficiently allowing for many concurrent web requests, with all relevant property data returned in a single sql query and all other processing done in memory using Node js.
+As a primary python developer some of the JavaScript may look strange and possibly inefficient. However I believe I have solved this problem efficiently allowing for many concurrent web requests, with all relevant property data returned in a single sql query and all other processing done in memory using Node js.
 
 #add models
 node_modules\.bin\sequelize-auto -o "./models" -d mydb -h localhost -u postgres -p 5432 -x '' -e postgres
